@@ -168,28 +168,27 @@ class GaussianFitter:
         return wvc, fc
     
     # Model Definition
-    def model(self, a, mu, sigma, delta_w):
+    def model(self, wv, flux, parameters):
         """
         Define a Gaussian model for an absorption feature in spectral data.
-
+    
         Parameters:
-        - a (float): Amplitude of the absorption feature.
-        - mu (float): Central wavelength of the absorption feature.
-        - sigma (float): Standard deviation, determining the spread or width of the absorption.
-        - delta_w (float): Wavelength-range parameter.
-
+        - wv (array-like): Array of wavelengths.
+        - flux (array-like): Array of flux values.
+        - parameters (list): List of Gaussian model parameters [amplitude, central wavelength, standard deviation, wavelength-range parameter].
+    
         Returns:
-        - msk (array-like): indices of the selected wavelength range
+        - msk (array-like): Indices of the selected wavelength range.
         - absorption_model (array-like): The Gaussian absorption model evaluated at the given wavelengths.
         """
         # Apply the wavelength range parameter
+        a, mu, sigma, delta_w = parameters
         lower_bound = mu - (delta_w * 0.5)
         upper_bound = mu + (delta_w * 0.5)
-        msk = np.logical_and(self.wv >= lower_bound, self.wv <= upper_bound)
-        lam = self.wv[msk]
+        msk = np.logical_and(wv >= lower_bound, wv <= upper_bound)
         
         # Calculate the Gaussian absorption model
-        absorption_model = -1 * a * np.exp(-0.5 * ((lam - mu) / sigma) ** 2) + (np.min(self.fc) + a)
+        absorption_model = -1 * a * np.exp(-0.5 * ((wv[msk] - mu) / sigma) ** 2) + (np.min(flux[msk]) + a)
 
         return msk, absorption_model
     
@@ -256,7 +255,7 @@ class GaussianFitter:
         return prior
     
     # Likelihood Function
-    def likelihood(self, parameters):
+    def likelihood(self, wv, flux, parameters):
         """
         Calculate the likelihood of the data given the parameters.
         
@@ -268,8 +267,8 @@ class GaussianFitter:
         """
         a, mu, sigma, delta_w = parameters
         
-        msk, absorption_model = self.model(a, mu, sigma, delta_w)
-        observed_data = self.flux[msk]
+        msk, absorption_model = self.model(wv, flux, parameters)
+        observed_data = flux[msk]
         # Calculate the likelihood as the product of probabilities at each wavelength
         epsilon = 1e-10  # Small epsilon to prevent division by zero
         likelihood = np.prod(np.exp(-0.5 * ((observed_data - absorption_model) / (sigma + epsilon)) ** 2)) / np.sqrt(2 * np.pi * (sigma**2 + epsilon))

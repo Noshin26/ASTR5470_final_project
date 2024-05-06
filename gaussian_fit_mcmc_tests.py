@@ -61,7 +61,7 @@ class TestGaussianFitter(unittest.TestCase):
     def test_likelihood(self):
         # Test likelihood function
         initial_parameters = [1.0, 5000, 100, 1000]
-        likelihood_value = self.gaussian_fitter.likelihood(initial_parameters)
+        likelihood_value = self.gaussian_fitter.likelihood(self.gaussian_fitter.wv, self.gaussian_fitter.flux, initial_parameters)
         self.assertIsInstance(likelihood_value, float)
         self.assertGreaterEqual(likelihood_value, 0)
 
