@@ -20,6 +20,20 @@ class TestGaussianFitter(unittest.TestCase):
         self.gaussian_fitter.name = "Test SN"
         self.gaussian_fitter.date = "2024-05-01"
         self.gaussian_fitter.l = 6564  # Example rest wavelength
+    
+    def test_relativistic_doppler_velocity(self):
+        # Test velocity to wavelength conversion
+        velocity = -20000  # km/s
+        expected_wavelength = self.gaussian_fitter.relativistic_doppler(velocity=velocity)
+        self.assertIsInstance(expected_wavelength, float)
+        self.assertAlmostEqual(expected_wavelength, 6139.775134)
+
+    def test_relativistic_doppler_wavelength(self):
+        # Test wavelength to velocity conversion
+        wavelength = 6139.775134  # Angstroms
+        expected_velocity = self.gaussian_fitter.relativistic_doppler(wavelength=wavelength)
+        self.assertIsInstance(expected_velocity, float)
+        self.assertAlmostEqual(expected_velocity, -20000.000000167354)
         
     def test_uniform_prior(self):
         # Test the uniform_prior function
@@ -46,15 +60,7 @@ class TestGaussianFitter(unittest.TestCase):
 
     def test_combined_prior(self):
         # Test the combined_prior function
-        amp_low = 0
-        amp_high = 3
-        mu_low = 4500
-        mu_high = 5500
-        sigma_low = 0
-        sigma_high = 100
-        delta_w_mu = 0
-        delta_w_sigma = 100/3
-        combined_pdf = self.gaussian_fitter.combined_prior(mu_low, mu_high, sigma_low, sigma_high, amp_low, amp_high, delta_w_mu, delta_w_sigma)
+        combined_pdf = self.gaussian_fitter.combined_prior()
         parameters = [1, 5000, 70, 1]
         self.assertAlmostEqual(combined_pdf(parameters), (1/3)*(1/1000)*(1/100)*0.0119628839)  # Test with example parameters
 

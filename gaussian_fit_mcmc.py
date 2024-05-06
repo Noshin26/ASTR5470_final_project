@@ -192,6 +192,30 @@ class GaussianFitter:
 
         return msk, absorption_model
     
+    # Relativistic Doppler Formula
+    def relativistic_doppler(self, velocity=None, wavelength=None, c=299792.458):
+        """
+        Convert between velocity and wavelength using the relativistic Doppler formula.
+
+        Parameters:
+        - velocity (float, optional): Velocity in km/s. Positive for recession velocity, negative for blueshift.
+        - wavelength (float, optional): Wavelength in Angstroms. Positive for redshift, negative for blueshift.
+        - c (float, optional): Speed of light in km/s. Default is the speed of light in vacuum.
+
+        Returns:
+        - float: The corresponding wavelength if velocity is given, or the corresponding velocity if wavelength is given.
+        """
+        if velocity is not None:
+            # Calculate wavelength from velocity
+            lam_o = self.l * np.sqrt((1 + velocity / c) / (1 - velocity / c))
+            return lam_o
+        elif wavelength is not None:
+            # Calculate velocity from wavelength
+            velocity = c * ((wavelength / self.l)**2 - 1) / ((wavelength / self.l)**2 + 1)
+            return velocity
+        else:
+            raise ValueError("Please provide either velocity or wavelength.")
+    
     # Prior Distribution
     def uniform_prior(self, low, high):
         """
@@ -226,23 +250,31 @@ class GaussianFitter:
             return (1 / (sigma * np.sqrt(2 * np.pi))) * np.exp((-0.5) * ((x - mu) / sigma) ** 2)
         return pdf
     
-    def combined_prior(self, mu_low, mu_high, sigma_low, sigma_high, amp_low, amp_high, delta_w_mu, delta_w_sigma):
+    def combined_prior(self):
         """
         Combined prior distribution function for parameters: mu, sigma, amplitude, and delta_w.
-
-        Parameters:
-        - mu_low: Lower bound of the uniform distribution for mu.
-        - mu_high: Upper bound of the uniform distribution for mu.
-        - sigma_low: Lower bound of the uniform distribution for sigma.
-        - sigma_high: Upper bound of the uniform distribution for sigma.
-        - amp_low: Lower bound of the uniform distribution for amplitude.
-        - amp_high: Upper bound of the uniform distribution for amplitude.
-        - delta_w_mu: Float, the mean of the Gaussian prior for delta_w.
-        - delta_w_sigma: Float, the standard deviation of the Gaussian prior for delta_w.
 
         Returns:
         - prior: Function representing the combined prior probability density.
         """
+        #c=299792.458
+        amp_low = 0
+        amp_high = 3
+        mu_low = 4500
+        mu_high = 5500
+        sigma_low = 0
+        sigma_high = 100
+        delta_w_mu = 0
+        delta_w_sigma = 100/3
+        '''amp_low = 0
+        amp_high = 3
+        mu_low = self.relativistic_doppler(velocity = -20000)
+        mu_high = self.relativistic_doppler(velocity = -5000)
+        sigma_low = 0
+        _, _, lam_s = self.select_line()
+        sigma_high = lam_s * (20000/c)
+        delta_w_mu = 0
+        delta_w_sigma = (100/3)'''
         mu_prior = self.uniform_prior(mu_low, mu_high)
         sigma_prior = self.uniform_prior(sigma_low, sigma_high)
         amp_prior = self.uniform_prior(amp_low, amp_high)
@@ -276,7 +308,6 @@ class GaussianFitter:
         likelihood = np.prod(np.exp(-0.5 * ((observed_data - absorption_model) / (sigma + epsilon)) ** 2)) / np.sqrt(2 * np.pi * (sigma**2 + epsilon))
         return likelihood
     
-    # MCMC Sampling
     # MCMC Sampling
     def proposal(self, wv, flux, initial_parameters, iterations, step_sizes):
         """
@@ -314,11 +345,13 @@ class GaussianFitter:
 
     
     # Posterior Distribution
-    def posterior_analysis(self, initial_param, num_iterations, likelihood, prior, proposal):
+    def posterior_analysis(self, wv, flux, initial_param, num_iterations):
         """
         Perform posterior analysis using the Metropolis-Hastings MCMC algorithm.
         
         Parameters:
+        - wv (array-like): Array of observed wavelengths.
+        - flux (array-like): Array of observed flux values corresponding to the wavelengths.
         - initial_param (float or array-like): The starting parameter value(s) for the MCMC algorithm.
         - num_iterations (int): The number of iterations to run the MCMC algorithm.
         - likelihood (function): A function that computes the likelihood of the data given a parameter.
@@ -330,43 +363,21 @@ class GaussianFitter:
         """
         current_param = initial_param
         samples = []
+        step_sizes = [0.1, 10, 1, 1]
+        prior = self.combined_prior()
         for _ in range(num_iterations):
-            step_sizes = [0.1, 10, 1, 1]
-            proposed_params = self.proposal(current_param, 1000, step_sizes)
+            proposed_params = self.proposal(wv, flux, current_param, 10000, step_sizes)
             for proposed_param in proposed_params:
                 prior_proposed = prior(proposed_param)
                 prior_current = prior(current_param)
-                likelihood_proposed = likelihood(proposed_param)
-                likelihood_current = likelihood(current_param)
+                likelihood_proposed = self.likelihood(proposed_param)
+                likelihood_current = self.likelihood(current_param)
                 acceptance_ratio = (likelihood_proposed * prior_proposed) / (likelihood_current * prior_current)
                 if acceptance_ratio >= 1 or np.random.uniform(0, 1) < acceptance_ratio:
                     current_param = proposed_param
                 samples.append(current_param)  # Append only accepted proposal
         return samples
     
-    # Relativistic Doppler Formula
-    def relativistic_doppler(self, velocity=None, wavelength=None, c=299792.458):
-        """
-        Convert between velocity and wavelength using the relativistic Doppler formula.
-
-        Parameters:
-        - velocity (float, optional): Velocity in km/s. Positive for recession velocity, negative for blueshift.
-        - wavelength (float, optional): Wavelength in Angstroms. Positive for redshift, negative for blueshift.
-        - c (float, optional): Speed of light in km/s. Default is the speed of light in vacuum.
-
-        Returns:
-        - float: The corresponding wavelength if velocity is given, or the corresponding velocity if wavelength is given.
-        """
-        if velocity is not None:
-            # Calculate wavelength from velocity
-            lam_o = self.l * np.sqrt((1 + velocity / c) / (1 - velocity / c))
-            return lam_o
-        elif wavelength is not None:
-            # Calculate velocity from wavelength
-            velocity = c * ((wavelength / self.l)**2 - 1) / ((wavelength / self.l)**2 + 1)
-            return velocity
-        else:
-            raise ValueError("Please provide either velocity or wavelength.")
     
     # Set Initial Parameters
     def set_initial_param(self):
