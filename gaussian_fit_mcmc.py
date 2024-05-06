@@ -11,8 +11,8 @@ import os
 from astropy.io import ascii
 import numpy as np
 import matplotlib
-import matplotlib.pyplot as plt
 matplotlib.use('TkAgg')
+import matplotlib.pyplot as plt
 
 class GaussianFitter:
     def __init__(self, spectrum_file, z=0, l='', n_steps=10000, burn_in=1000, thinning=1):
@@ -27,12 +27,18 @@ class GaussianFitter:
     def read_file(self):
         """
         Reads an ASCII file containing two columns: observed wavelength and corresponding flux.
-        
+    
+        This function reads an ASCII file containing spectral data. It extracts the name of the supernova and the observation date from the file name. 
+        The observed wavelengths and corresponding flux values are extracted from the file and returned.
+    
         Returns:
         - name (str): The name of the supernova extracted from the file name.
         - date (str): The observation date extracted from the file name.
         - wavelengths (list of float): A list of observed wavelengths.
         - fluxes (list of float): A list of corresponding flux values.
+        
+        Raises:
+        - IOError: If there is an error reading the file.
         """
         try:
             # Extract name and date from the file path
@@ -109,27 +115,25 @@ class GaussianFitter:
         return plt.gcf()
     
     # Select the wavelength range around the absorption
-    def get_bounds(self):
+    def get_bounds(self, name, date, wv, flux):
         """
         Get wavelength bounds by selecting two points on a spectrum plot.
     
         Parameters:
-            line (str): Line of interest (e.g., 'H-alpha', 'OII').
-            row (int): Row index for the spectrum data.
-            sn (dict): Dictionary containing spectrum data (e.g., 'Wavelength', 'Flux').
-            z (float): Redshift.
-            name (str): Name or identifier for the spectrum.
-            //existing_plot (matplotlib.figure.Figure, optional): Existing plot to reuse.
+        - name (str): Name or identifier for the spectrum.
+        - date (str): Observation date extracted from the file name.
+        - wv (array-like): Array of observed wavelengths.
+        - flux (array-like): Array of corresponding flux values.
     
         Returns:
-            list: List of two selected points (x, y) on the plot.
+        - list: List of two selected points (x, y) on the plot.
         """
-        plot = self.create_plot(f"{self.name}  date = {self.date}")
+        plot = self.create_plot(f"{name}  date = {date}")
         plt.figure(plot.number)  # Activate the figure window
         wv_l, wv_h, lam_s = self.select_line()
-        msk = (self.wv > wv_l) & (self.wv < wv_h)
-        wv_zoomed = self.wv[msk]
-        flux_zoomed = self.flux[msk]
+        msk = (wv > wv_l) & (wv < wv_h)
+        wv_zoomed = wv[msk]
+        flux_zoomed = flux[msk]
         plt.plot(wv_zoomed, flux_zoomed, label ='Zoomed-In Reduced Spectrum')
         plt.legend()
     
@@ -137,23 +141,30 @@ class GaussianFitter:
     
         return x 
 
-    def selected_range(self):
+    def selected_range(self, name, date, wv, flux):
         """
         Returns the selected wavelength and corresponding flux.
     
+        Parameters:
+        - name (str): Name or identifier for the spectrum.
+        - date (str): Observation date extracted from the file name.
+        - wv (array-like): Array of observed wavelengths.
+        - flux (array-like): Array of corresponding flux values.
+    
         Returns:
-            tuple: A tuple containing arrays of selected wavelength and corresponding flux.
+        - tuple: A tuple containing arrays of selected wavelength and corresponding flux.
         """
-        bounds = self.get_bounds()
+        bounds = self.get_bounds(name, date, wv, flux)
         plt.scatter(bounds[0][0], bounds[0][1], c='red')
         plt.scatter(bounds[1][0], bounds[1][1], c='red')
         plt.draw()
-        msk = np.logical_and(bounds[0][0] < self.wv, bounds[1][0] > self.wv)
+        msk = np.logical_and(bounds[0][0] < wv, bounds[1][0] > wv)
         wvl_bins = np.argwhere(msk)
-        wvc = self.wv[wvl_bins]
-        fc = self.flux[wvl_bins]
+        wvc = wv[wvl_bins]
+        fc = flux[wvl_bins]
         plt.plot(wvc, fc, c='red', label='Selected Region')
         plt.legend()
+        plt.show()
         return wvc, fc
     
     # Model Definition
@@ -398,8 +409,10 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Fit Gaussian model to supernova spectrum.")
     parser.add_argument("spectrum_file", type=str, help="Path to spectrum file")
     parser.add_argument("-z", "--redshift", type=float, default=0, help="Galaxy redshift")
-    parser.add_argument("-l", "--line", type=float, default=None, help="Wavelength of the absorption line")
+    parser.add_argument("-l", "--line", type=str, default=None, help="Wavelength of the absorption line")
     args = parser.parse_args()
     
     fitter = GaussianFitter(args.spectrum_file, args.redshift, args.line)
-    name, date, wavelengths, fluxes = fitter.read_file()
+    name, date, wv, flux = fitter.read_file()
+    wvc, fc = fitter.selected_range(name, date, wv, flux)
+    
