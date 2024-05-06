@@ -97,16 +97,20 @@ class TestGaussianFitter(unittest.TestCase):
                 self.assertIsInstance(param, float)
 
 
-    '''def test_posterior_analysis(self):
+    def test_posterior_analysis(self):
         # Test posterior_analysis function
         initial_parameters = [1.0, 5000, 100, 1000]
-        num_iterations = 30
-        samples = self.gaussian_fitter.posterior_analysis(initial_parameters, num_iterations, 
-                                                           self.gaussian_fitter.likelihood, 
-                                                           self.gaussian_fitter.combined_prior, 
-                                                           self.gaussian_fitter.proposal)
-        self.assertIsInstance(samples, list)
-        self.assertGreaterEqual(len(samples), 0)'''
+        num_iterations = 3
+        accepted_samples = self.gaussian_fitter.posterior_analysis(self.gaussian_fitter.wv, self.gaussian_fitter.flux, initial_parameters, num_iterations)
+        
+        # Check if the returned value is a list
+        self.assertIsInstance(accepted_samples, list)
+
+        # Check if the list contains tuples with correct length
+        for sample in accepted_samples:
+            self.assertIsInstance(sample, list)
+            self.assertEqual(len(sample), len(initial_parameters))
+
 
     # Add more tests for other functions if needed
 

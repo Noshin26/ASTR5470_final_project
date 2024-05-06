@@ -186,6 +186,7 @@ class GaussianFitter:
         lower_bound = mu - (delta_w * 0.5)
         upper_bound = mu + (delta_w * 0.5)
         msk = np.logical_and(wv >= lower_bound, wv <= upper_bound)
+        #print(flux)
         
         # Calculate the Gaussian absorption model
         absorption_model = -1 * a * np.exp(-0.5 * ((wv[msk] - mu) / sigma) ** 2) + (np.min(flux[msk]) + a)
@@ -354,24 +355,21 @@ class GaussianFitter:
         - flux (array-like): Array of observed flux values corresponding to the wavelengths.
         - initial_param (float or array-like): The starting parameter value(s) for the MCMC algorithm.
         - num_iterations (int): The number of iterations to run the MCMC algorithm.
-        - likelihood (function): A function that computes the likelihood of the data given a parameter.
-        - prior (function): A function that computes the prior probability of a given parameter.
-        - proposal (function): A function that suggests a new parameter value based on the current one.
         
         Returns:
         - accepted_samples (list): A list of accepted parameter values sampled from the posterior distribution.
         """
         current_param = initial_param
         samples = []
-        step_sizes = [0.1, 10, 1, 1]
+        step_sizes = [0.1, 10, 1, 2]
         prior = self.combined_prior()
         for _ in range(num_iterations):
             proposed_params = self.proposal(wv, flux, current_param, 10000, step_sizes)
             for proposed_param in proposed_params:
                 prior_proposed = prior(proposed_param)
                 prior_current = prior(current_param)
-                likelihood_proposed = self.likelihood(proposed_param)
-                likelihood_current = self.likelihood(current_param)
+                likelihood_proposed = self.likelihood(wv, flux, proposed_param)
+                likelihood_current = self.likelihood(wv, flux, current_param)
                 acceptance_ratio = (likelihood_proposed * prior_proposed) / (likelihood_current * prior_current)
                 if acceptance_ratio >= 1 or np.random.uniform(0, 1) < acceptance_ratio:
                     current_param = proposed_param
@@ -405,23 +403,54 @@ class GaussianFitter:
         init_param = [a, mu, sigma, delta_w]
         return init_param
     
+    def plot_trace(parameter_samples, parameter_names):
+        """
+        Plot the trace plots for MCMC parameters.
+        
+        Parameters:
+        - parameter_samples (list of lists): List of parameter samples from the MCMC chain.
+        - parameter_names (list of str): List of parameter names.
+        """
+        num_params = len(parameter_names)
+        iterations = len(parameter_samples)
+        
+        fig, axes = plt.subplots(num_params, 1, figsize=(8, 4*num_params))
+        
+        for i in range(num_params):
+            param_samples = [sample[i] for sample in parameter_samples]
+            axes[i].plot(np.arange(iterations), param_samples, color='blue', alpha=0.6)
+            axes[i].set_xlabel('Iteration')
+            axes[i].set_ylabel(parameter_names[i])
+            axes[i].set_title(f'Trace plot of {parameter_names[i]}')
+            axes[i].grid(True)
+        
+        plt.tight_layout()
+        plt.show()
     
-    def fit_gaussian(self):
+    def fit_gaussian(self, wv, flux):
         # Initialize initial parameters
         initial_param = self.set_initial_param()
     
         # Run Metropolis-Hastings MCMC to fit Gaussian model
-        samples = self.posterior_analysis(initial_param, num_iterations=5000, likelihood=self.likelihood,
-                                           prior=self.combined_prior, proposal=self.proposal)
+        samples = self.posterior_analysis(wv, flux, initial_param, num_iterations=5000)
     
         # Return posterior mean
         return np.mean(samples, axis=0)
     
-    def plot_results(self):
+    def plot_results(self, wv, flux):
         # Plot spectrum with fitted Gaussian model
-        pass
-
-# Example usage:
+        fitted_params = self.fit_gaussian(wv, flux)
+        msk, model_flux = self.model(wv, flux, fitted_params)
+        
+        plt.figure(figsize=(10, 6))
+        plt.plot(wv, flux, label='Observed Spectrum', color='blue')
+        plt.plot(wv[msk], model_flux, label='Fitted Gaussian Model', color='red')
+        plt.xlabel('Wavelength')
+        plt.ylabel('Flux')
+        plt.title('Spectrum with Fitted Gaussian Model')
+        plt.legend()
+        plt.show()
+        
 if __name__ == "__main__":
     import argparse
     
