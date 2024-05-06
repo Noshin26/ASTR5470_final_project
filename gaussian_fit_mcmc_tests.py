@@ -58,7 +58,6 @@ class TestGaussianFitter(unittest.TestCase):
         parameters = [1, 5000, 70, 1]
         self.assertAlmostEqual(combined_pdf(parameters), (1/3)*(1/1000)*(1/100)*0.0119628839)  # Test with example parameters
 
-    '''
     def test_likelihood(self):
         # Test likelihood function
         initial_parameters = [1.0, 5000, 100, 1000]
@@ -66,7 +65,7 @@ class TestGaussianFitter(unittest.TestCase):
         self.assertIsInstance(likelihood_value, float)
         self.assertGreaterEqual(likelihood_value, 0)
 
-    def test_proposal(self):
+    '''def test_proposal(self):
         # Test proposal function
         initial_parameters = [1.0, 5000, 100, 1000]
         iterations = 100
