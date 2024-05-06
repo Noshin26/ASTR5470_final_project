@@ -257,13 +257,15 @@ class GaussianFitter:
     # Likelihood Function
     def likelihood(self, wv, flux, parameters):
         """
-        Calculate the likelihood of the data given the parameters.
-        
+        Calculate the likelihood of the observed flux given the model parameters.
+    
         Parameters:
-        - parameters: array-like, containing [amplitude, central_wavelength, sigma, delta_w].
-        
+        - wv (array-like): Array of observed wavelengths.
+        - flux (array-like): Array of observed flux values corresponding to the wavelengths.
+        - parameters (list): List containing [amplitude, central_wavelength, sigma, delta_w] of the Gaussian model.
+    
         Returns:
-        - likelihood: float, the likelihood of the data given the parameters.
+        - likelihood (float): The likelihood of the observed flux given the model parameters.
         """
         a, mu, sigma, delta_w = parameters
         
@@ -275,34 +277,41 @@ class GaussianFitter:
         return likelihood
     
     # MCMC Sampling
-    def proposal(self, initial_parameters, iterations, step_sizes):
-        """Metropolis-Hastings algorithm to sample from the posterior distribution of parameters.
-        
+    # MCMC Sampling
+    def proposal(self, wv, flux, initial_parameters, iterations, step_sizes):
+        """
+        Metropolis-Hastings algorithm to sample from the posterior distribution of parameters.
+    
         Parameters:
+        - wv (array-like): Array of observed wavelengths.
+        - flux (array-like): Array of observed flux values corresponding to the wavelengths.
         - initial_parameters: list, initial guesses for the parameters [amplitude, mu, sigma, delta_w].
-        - iterations: int, number of iterations to run the algorithm.
+        - iterations: int, total number of iterations including burn-in.
         - step_sizes: list, step sizes for each parameter [amp_step, mu_step, sigma_step, delta_w_step].
-        
+    
         Returns:
         - samples: list of tuples, sampled parameter 
         values [amplitude, mu, sigma, delta_w] from the posterior distribution.
         """
         current_parameters = initial_parameters
         samples = []
-
-        for _ in range(iterations):
+    
+        for i in range(iterations):
             # Propose new parameters
             proposed_parameters = [np.random.normal(current_parameters[i], step_sizes[i]) for i in range(4)]
             proposed_parameters[3] = max(0, proposed_parameters[3])  # Enforce non-negativity
+    
             # Compute the likelihood ratio
-            acceptance_ratio = self.likelihood(proposed_parameters) / self.likelihood(current_parameters)
-            
+            acceptance_ratio = self.likelihood(wv, flux, proposed_parameters) / self.likelihood(wv, flux, current_parameters)
+    
             # Accept or reject the proposal
             if acceptance_ratio >= 1 or np.random.uniform(0, 1) < acceptance_ratio:
                 current_parameters = proposed_parameters
-                samples.append(current_parameters)  # Only append accepted proposals
-
+                if i >= self.burn_in and i % self.thinning == 0:
+                    samples.append(current_parameters)  # Only append accepted proposals
+    
         return samples
+
     
     # Posterior Distribution
     def posterior_analysis(self, initial_param, num_iterations, likelihood, prior, proposal):

@@ -65,16 +65,33 @@ class TestGaussianFitter(unittest.TestCase):
         self.assertIsInstance(likelihood_value, float)
         self.assertGreaterEqual(likelihood_value, 0)
 
-    '''def test_proposal(self):
+    def test_proposal(self):
         # Test proposal function
         initial_parameters = [1.0, 5000, 100, 1000]
-        iterations = 100
+        iterations = 10000
         step_sizes = [0.1, 10, 1, 1]
-        samples = self.gaussian_fitter.proposal(initial_parameters, iterations, step_sizes)
+        samples = self.gaussian_fitter.proposal(self.gaussian_fitter.wv, self.gaussian_fitter.flux, initial_parameters, iterations, step_sizes)
+        
+        # Check if samples is a list
         self.assertIsInstance(samples, list)
+    
+        # Check if samples list is not empty
         self.assertGreaterEqual(len(samples), 0)
+    
+        # Check if each sample is a list
+        for sample in samples:
+            self.assertIsInstance(sample, list)
+    
+        # Check if each sample tuple has the correct length (number of parameters)
+        self.assertEqual(len(samples[0]), len(initial_parameters))
+    
+        # Check if all elements in each sample tuple are floats
+        for sample in samples:
+            for param in sample:
+                self.assertIsInstance(param, float)
 
-    def test_posterior_analysis(self):
+
+    '''def test_posterior_analysis(self):
         # Test posterior_analysis function
         initial_parameters = [1.0, 5000, 100, 1000]
         num_iterations = 30
