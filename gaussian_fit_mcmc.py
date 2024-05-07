@@ -15,7 +15,7 @@ matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
 
 class GaussianFitter:
-    def __init__(self, spectrum_file, z=0, l='', n_steps=10000, burn_in=1000, thinning=1):
+    def __init__(self, spectrum_file, z=0, l='', n_steps=10000, burn_in=0, thinning=2):
         self.spectrum_file = spectrum_file
         self.z = z
         self.l = l
@@ -164,7 +164,7 @@ class GaussianFitter:
         fc = flux[wvl_bins]
         plt.plot(wvc, fc, c='red', label='Selected Region')
         plt.legend()
-        plt.show()
+        plt.show(block=False)
         return wvc, fc
     
     # Model Definition
@@ -186,10 +186,17 @@ class GaussianFitter:
         lower_bound = mu - (delta_w * 0.5)
         upper_bound = mu + (delta_w * 0.5)
         msk = np.logical_and(wv >= lower_bound, wv <= upper_bound)
-        #print(flux)
+        if np.any(msk):
+        # Calculate the absorption model only if msk is not empty
+            absorption_model = -1 * a * np.exp(-0.5 * ((wv[msk] - mu) / sigma) ** 2) + (np.min(flux[msk]) + a)
+        else:
+            # Handle the case where msk is empty (e.g., print a message or handle it differently)
+            print("Warning: No data points in the selected wavelength range.")
+            print("Lower bound:", lower_bound)
+            print("Upper bound:", upper_bound)
         
         # Calculate the Gaussian absorption model
-        absorption_model = -1 * a * np.exp(-0.5 * ((wv[msk] - mu) / sigma) ** 2) + (np.min(flux[msk]) + a)
+        #absorption_model = -1 * a * np.exp(-0.5 * ((wv[msk] - mu) / sigma) ** 2) + (np.min(flux[msk]) + a)
 
         return msk, absorption_model
     
@@ -206,13 +213,14 @@ class GaussianFitter:
         Returns:
         - float: The corresponding wavelength if velocity is given, or the corresponding velocity if wavelength is given.
         """
+        _,_, lam_s = self.select_line()
         if velocity is not None:
             # Calculate wavelength from velocity
-            lam_o = self.l * np.sqrt((1 + velocity / c) / (1 - velocity / c))
+            lam_o = lam_s * np.sqrt((1 + velocity / c) / (1 - velocity / c))
             return lam_o
         elif wavelength is not None:
             # Calculate velocity from wavelength
-            velocity = c * ((wavelength / self.l)**2 - 1) / ((wavelength / self.l)**2 + 1)
+            velocity = c * ((wavelength / lam_s)**2 - 1) / ((wavelength / lam_s)**2 + 1)
             return velocity
         else:
             raise ValueError("Please provide either velocity or wavelength.")
@@ -258,16 +266,8 @@ class GaussianFitter:
         Returns:
         - prior: Function representing the combined prior probability density.
         """
-        #c=299792.458
+        c=299792.458
         amp_low = 0
-        amp_high = 3
-        mu_low = 4500
-        mu_high = 5500
-        sigma_low = 0
-        sigma_high = 100
-        delta_w_mu = 0
-        delta_w_sigma = 100/3
-        '''amp_low = 0
         amp_high = 3
         mu_low = self.relativistic_doppler(velocity = -20000)
         mu_high = self.relativistic_doppler(velocity = -5000)
@@ -275,7 +275,7 @@ class GaussianFitter:
         _, _, lam_s = self.select_line()
         sigma_high = lam_s * (20000/c)
         delta_w_mu = 0
-        delta_w_sigma = (100/3)'''
+        delta_w_sigma = (100/3)
         mu_prior = self.uniform_prior(mu_low, mu_high)
         sigma_prior = self.uniform_prior(sigma_low, sigma_high)
         amp_prior = self.uniform_prior(amp_low, amp_high)
@@ -331,8 +331,15 @@ class GaussianFitter:
         for i in range(iterations):
             # Propose new parameters
             proposed_parameters = [np.random.normal(current_parameters[i], step_sizes[i]) for i in range(4)]
-            proposed_parameters[3] = max(0, proposed_parameters[3])  # Enforce non-negativity
-    
+            #proposed_parameters[3] = max(100, proposed_parameters[3])  # Enforce > 100 A
+            #proposed_parameters[3] = min(proposed_parameters[3], 3000)  # Enforce < 3000 A
+            lower_bound = proposed_parameters[1] - (proposed_parameters[3] * 0.5)
+            upper_bound = proposed_parameters[1] + (proposed_parameters[3] * 0.5)
+            msk = np.logical_and(wv >= lower_bound, wv <= upper_bound)
+            # Discard proposed parameters if lower bound is less than a certain value or upper bound is bigger than a certain value
+            if not any(msk):
+                # Discard the proposed parameters
+                continue
             # Compute the likelihood ratio
             acceptance_ratio = self.likelihood(wv, flux, proposed_parameters) / self.likelihood(wv, flux, current_parameters)
     
@@ -341,7 +348,6 @@ class GaussianFitter:
                 current_parameters = proposed_parameters
                 if i >= self.burn_in and i % self.thinning == 0:
                     samples.append(current_parameters)  # Only append accepted proposals
-    
         return samples
 
     
@@ -374,16 +380,20 @@ class GaussianFitter:
                 if acceptance_ratio >= 1 or np.random.uniform(0, 1) < acceptance_ratio:
                     current_param = proposed_param
                 samples.append(current_param)  # Append only accepted proposal
+        print("Posterior analysis is complete.")
         return samples
     
     
     # Set Initial Parameters
-    def set_initial_param(self):
+    def set_initial_param(self, name, date, wv, flux):
         """
         Set initial parameters for the MCMC algorithm.
-
+        
         Parameters:
-        - wvc (array-like): Array of wavelengths for the selected region.
+        - name (str): Name or identifier for the spectrum.
+        - date (str): Observation date extracted from the file name.
+        - wv (array-like): Array of observed wavelengths.
+        - flux (array-like): Array of corresponding flux values.
 
         Returns:
         - list: Initial parameter values [amplitude, mu, sigma, delta_w].
@@ -398,10 +408,25 @@ class GaussianFitter:
         _, _, lam_s = self.select_line()
         sigma_high = lam_s * (20000/c)
         sigma = np.random.uniform(sigma_low, sigma_high)
-        wvc = self.selected_range()
+        wvc, fc = self.selected_range(name, date, wv, flux)
         delta_w = np.max(wvc) - np.min(wvc)
         init_param = [a, mu, sigma, delta_w]
+        # Print initial parameter values
+        print("Initial parameter values:")
+        print("Amplitude:", a)
+        print("Mu:", mu)
+        print("Sigma:", sigma)
+        print("Delta W:", delta_w)
         return init_param
+    
+    def plot_results(self, name, date, wv, flux, posterior_mean):
+        # Plot spectrum with fitted Gaussian model
+        msk, model_flux = self.model(wv, flux, posterior_mean)
+        plt.plot(wv[msk], model_flux, label='Fitted Gaussian Model', color='blue')
+        plt.legend()
+        plt.draw()
+        plt.show(block = False)
+        plt.pause(0.001)  # Allow time for plot window to refresh
     
     def plot_trace(parameter_samples, parameter_names):
         """
@@ -427,30 +452,29 @@ class GaussianFitter:
         plt.tight_layout()
         plt.show()
     
-    def fit_gaussian(self, wv, flux):
-        # Initialize initial parameters
-        initial_param = self.set_initial_param()
+    # Check goodness of the function
+    def chi_square(observed_data, expected_data):
+        """
+        Calculate the chi-square goodness-of-fit statistic.
     
-        # Run Metropolis-Hastings MCMC to fit Gaussian model
-        samples = self.posterior_analysis(wv, flux, initial_param, num_iterations=5000)
+        Parameters:
+        - observed_data (array-like): Array of observed data.
+        - expected_data (array-like): Array of expected data (model predictions).
     
-        # Return posterior mean
-        return np.mean(samples, axis=0)
-    
-    def plot_results(self, wv, flux):
-        # Plot spectrum with fitted Gaussian model
-        fitted_params = self.fit_gaussian(wv, flux)
-        msk, model_flux = self.model(wv, flux, fitted_params)
+        Returns:
+        - chi_sq (float): The chi-square statistic.
+        """
+        # Ensure the observed and expected data have the same length
+        assert len(observed_data) == len(expected_data), "Observed and expected data must have the same length"
         
-        plt.figure(figsize=(10, 6))
-        plt.plot(wv, flux, label='Observed Spectrum', color='blue')
-        plt.plot(wv[msk], model_flux, label='Fitted Gaussian Model', color='red')
-        plt.xlabel('Wavelength')
-        plt.ylabel('Flux')
-        plt.title('Spectrum with Fitted Gaussian Model')
-        plt.legend()
-        plt.show()
+        # Calculate the sum of squared differences between observed and expected data
+        squared_diffs = (np.array(observed_data) - np.array(expected_data)) ** 2
         
+        # Calculate the chi-square statistic
+        chi_sq = np.sum(squared_diffs / np.array(expected_data))
+        
+        return chi_sq
+            
 if __name__ == "__main__":
     import argparse
     
@@ -462,5 +486,11 @@ if __name__ == "__main__":
     
     fitter = GaussianFitter(args.spectrum_file, args.redshift, args.line)
     name, date, wv, flux = fitter.read_file()
-    wvc, fc = fitter.selected_range(name, date, wv, flux)
+    initial_param = fitter.set_initial_param(name, date, wv, flux)
+    samples = fitter.posterior_analysis(wv, flux, initial_param, num_iterations = 50)
+    posterior_mean = np.mean(samples, axis=0)
+    print("Posterior mean of parameters:", posterior_mean)
+    fitter.plot_results(name, date, wv, flux, posterior_mean)
+    parameter_names = ['a', 'mu', 'sigma', 'delta_w']
+    fitter.plot_trace(samples, parameter_names)
     
