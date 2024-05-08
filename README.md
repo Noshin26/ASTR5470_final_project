@@ -9,9 +9,6 @@ This Python script enables users to analyze spectra of SNe Ic-bl by fitting Gaus
 Replace spectrum_file.ascii with the path to your spectrum data file. Additionally, include the following optional arguments:
 -z: Specifies the galaxy redshift.
 -l: Specifies the absorption line.
-# Unittest
-A testing script gaussian_fit_mcmc_tests.py is provided to test key functions of the main script. You can run the tests using the following command: 'python gaussian_fit_mcmc_tests.py'
-Ensure that you have installed the unittest module to execute the tests.
 # Instructions
 Upon running the command, an interactive window will open, displaying the supernova spectrum.
 Click on the two points on te spectra, the first power is for the lower bound of the selected range and the second point is for the upper bound of the selected range. 
@@ -20,6 +17,7 @@ Click on the two points on te spectra, the first power is for the lower bound of
 1. Parameters: Amplitude, mean, and sigma of the fitted Gaussian model.
 Mean Velocity and Standard Deviation: Mean velocity and one standard deviation of the fitted model.
 2. Chi-Square Value: Value of the chi-square test.
+3. Since the code is in development, the console with also show parameter values from the lmfit for comparison with the mcmc results. 
 # Generated Output Files:
 1. Plot of Observed Spectrum with Fitted Gaussian Model:
 Description: A plot showing the observed spectrum with the fitted Gaussian model overlaid.
@@ -36,3 +34,6 @@ File Type: Image file (e.g., PNG).
 
 # References
 This work is adapted (with modifcation) from Modjaz et al. 2016.
+
+# Acknowledgement
+ChatGPT is used for parts of the code, such as writing Python DocStrings.
