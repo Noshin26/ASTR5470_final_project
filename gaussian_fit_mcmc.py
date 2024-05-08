@@ -8,8 +8,10 @@ Created on Mon May  6 00:07:12 2024
 
 # Import modules
 import os
-from astropy.io import ascii
+from scipy.io import readsav
 import numpy as np
+import corner
+import lmfit
 import matplotlib
 matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
@@ -26,10 +28,8 @@ class GaussianFitter:
     # Data Preparation
     def read_file(self):
         """
-        Reads an ASCII file containing two columns: observed wavelength and corresponding flux.
+        Reads an sav file containing two columns: observed wavelength and corresponding flux (smoothed).
     
-        This function reads an ASCII file containing spectral data. It extracts the name of the supernova and the observation date from the file name. 
-        The observed wavelengths and corresponding flux values are extracted from the file and returned.
     
         Returns:
         - name (str): The name of the supernova extracted from the file name.
@@ -47,13 +47,17 @@ class GaussianFitter:
             date = file_name.split("_")[1]
             
             # Read the ASCII file
-            spec = ascii.read(self.spectrum_file)
+             
+            spec = readsav(self.spectrum_file)
             
             # Normalize the flux by dividing by the mean flux
-            flux = spec['col2'] / np.mean(spec['col2'])
+            flux = spec['f_ft'] / np.mean(spec['f_ft'])
             
             # Apply redshift correction to wavelengths
-            wv = spec['col1'] / (1 + self.z)
+            wv = spec['w'] / (1 + self.z)
+            
+            flux = np.array(flux)
+            wv = np.array(wv)
             
             print(f"File is accepted '{self.spectrum_file}'")
             return name, date, wv, flux
@@ -185,7 +189,7 @@ class GaussianFitter:
         # Apply the wavelength range parameter
         a, mu, sigma = parameters
         msk = np.logical_and(wv >= np.min(wvc), wv <= np.max(wvc))
-        absorption_model = -1 * a * np.exp(-0.5 * ((wv[msk] - mu) / sigma) ** 2) + (np.min(flux[msk]) + a)
+        absorption_model = -1 * a * np.exp(-0.5 * ((wv[msk] - mu) / sigma) ** 2) + (np.min(flux[msk]))
 
         return msk, absorption_model
     
@@ -233,21 +237,6 @@ class GaussianFitter:
                 return 0
         return pdf
     
-    def gaussian_prior(self, mu, sigma):
-        """
-        This function returns a Gaussian prior distribution function.
-        
-        Parameters:
-        - mu (float): the mean of the Gaussian prior.
-        - sigma (float): the standard deviation of the Gaussian prior.
-        
-        Returns:
-        - pdf: a function representing the Gaussian prior probability density.
-        """
-        def pdf(x):
-            return (1 / (sigma * np.sqrt(2 * np.pi))) * np.exp((-0.5) * ((x - mu) / sigma) ** 2)
-        return pdf
-    
     def combined_prior(self):
         """
         Combined prior distribution function for parameters: mu, sigma, amplitude, and delta_w.
@@ -256,13 +245,13 @@ class GaussianFitter:
         - prior: Function representing the combined prior probability density.
         """
         c=299792.458
-        amp_low = 0
-        amp_high = 2
+        amp_low = 0.05
+        amp_high = 1
         mu_low = self.relativistic_doppler(velocity = -60000)
         mu_high = self.relativistic_doppler(velocity = -5000)
         sigma_low = 0
         _, _, lam_s = self.select_line()
-        sigma_high = lam_s * (20000/c)
+        sigma_high = lam_s * (10000/c)
         mu_prior = self.uniform_prior(mu_low, mu_high)
         sigma_prior = self.uniform_prior(sigma_low, sigma_high)
         amp_prior = self.uniform_prior(amp_low, amp_high)
@@ -346,7 +335,7 @@ class GaussianFitter:
         """
         current_param = initial_param
         samples = []
-        step_sizes = [0.01, 10, 1]
+        step_sizes = [0.1, 10, 10]
         prior = self.combined_prior()
         for _ in range(num_iterations):
             proposed_params = self.proposal(wv, flux, wvc, current_param, 10000, step_sizes)
@@ -376,18 +365,14 @@ class GaussianFitter:
         - list: Initial parameter values [amplitude, mu, sigma].
         """
         c=299792.458
-        # Randomly initialize parameters
-        #a = np.random.rand() * 4
-        a = 1.0
+        a = 0.5
         mu_low = self.relativistic_doppler(velocity = -60000)
         mu_high = self.relativistic_doppler(velocity = -5000)
-        #mu = np.random.uniform(mu_low, mu_high)
         mu = ((mu_high-mu_low)/2) + mu_low
         sigma_low = 0
         _, _, lam_s = self.select_line()
-        sigma_high = lam_s * (20000/c)
-        #sigma = np.random.uniform(sigma_low, sigma_high)
-        sigma = sigma_high/2
+        sigma_high = lam_s * (10000/c)
+        sigma = (sigma_high-sigma_low)/2
         delta_w = np.max(wvc) - np.min(wvc)
         init_param = [a, mu, sigma]
         # Print initial parameter values
@@ -398,8 +383,82 @@ class GaussianFitter:
         print("Sigma:", sigma)
         return init_param
     
+    # Fit a Gaussian 
+    # Define the Gaussian function
+    def gaussian(self, x, amp, mu, sigma, baseline):
+        """
+        Calculate the value of an inverted Gaussian function at given x values.
+
+        Parameters:
+        - x (array-like): Independent variable values.
+        - amp (float): Amplitude of the Gaussian function.
+        - mu (float): Mean of the Gaussian function.
+        - sigma (float): Standard deviation of the Gaussian function.
+        - baseline (float): Baseline value added to the Gaussian function.
+
+        Returns:
+        - array-like: Values of the Gaussian function at the given x values.
+        """
+        return amp * np.exp(-0.5 * ((x - mu) / sigma) ** 2) + baseline
+
+    # Function to fit the Gaussian model to the data
+    def fit_gaussian(self, wvc, fc):
+        """
+        Fit an inverted Gaussian model to the given data.
+
+        Parameters:
+        - wvc (array-like): Independent variable values (e.g., wavelengths).
+        - fc (array-like): Dependent variable values (e.g., flux).
+
+        Returns:
+        - tuple: A tuple containing the fitted parameters (amp, mu, sigma, baseline)
+                 and the covariance matrix.
+        """
+        # Create a new model
+        model = lmfit.Model(self.gaussian)
+        
+        # Set initial parameter values
+        c=299792.458
+        a = 0.5
+        mu_low = self.relativistic_doppler(velocity = -60000)
+        mu_high = self.relativistic_doppler(velocity = -5000)
+        mu = ((mu_high-mu_low)/2) + mu_low
+        sigma_low = 0
+        _, _, lam_s = self.select_line()
+        sigma_high = lam_s * (10000/c)
+        sigma = (sigma_high-sigma_low)/2
+        params = model.make_params(amp=-a, mu=mu, sigma=sigma, baseline=np.mean(fc))
+        
+        # Perform the fit
+        result = model.fit(fc, params, x=wvc)
+        
+        # Get the fitted parameters and covariance matrix
+        fit_params = [result.best_values[param] for param in ['amp', 'mu', 'sigma', 'baseline']]
+        covariance = result.covar
+        
+        plt.plot(wvc, self.gaussian(wvc, *fit_params), label="lmfit Fitted Gaussian", linestyle="--")
+        plt.draw()
+        plt.show(block=False)
+        return fit_params, covariance
+    
     def plot_results(self, wv, flux, wvc, posterior_mean):
-        # Plot spectrum with fitted Gaussian model
+        """
+        Plot the spectrum with the fitted Gaussian model.
+    
+        Parameters:
+        - wv (array-like): Wavelength values of the spectrum.
+        - flux (array-like): Flux values of the spectrum.
+        - wvc (array-like): Wavelength values used for fitting the Gaussian model.
+        - posterior_mean (array-like): Posterior mean of the Gaussian parameters obtained from MCMC.
+    
+        Returns:
+        - None
+    
+        This function plots the spectrum with the fitted Gaussian model overlaid. It uses the model function
+        to calculate the model flux based on the posterior mean of the Gaussian parameters. The plot is displayed
+        and saved as an image file with the name '{name}_{date}_fitted_gaussian.png'. The plot window is not
+        blocked to allow for interactive use, and a brief pause is added to allow time for the plot window to refresh.
+        """
         msk, model_flux = self.model(wv, flux, wvc, posterior_mean)
         plt.plot(wv[msk], model_flux, label='Fitted Gaussian Model', color='blue')
         plt.legend()
@@ -470,13 +529,48 @@ if __name__ == "__main__":
     fitter = GaussianFitter(args.spectrum_file, args.redshift, args.line)
     name, date, wv, flux = fitter.read_file()
     wvc, fc = fitter.selected_range(name, date, wv, flux)
+    wvc = np.array(wvc).flatten()
+    fc = np.array(fc).flatten()
+    _, _, lam_s = fitter.select_line()
     initial_param = fitter.set_initial_param(wvc, fc)
-    samples = fitter.posterior_analysis(wv, flux, wvc, initial_param, num_iterations = 150)
+    samples = fitter.posterior_analysis(wv, flux, wvc, initial_param, num_iterations = 100)
     posterior_mean = np.mean(samples, axis=0)
     print("Posterior mean of parameters:", posterior_mean)
-    fitter.plot_results(wv, flux, wvc, posterior_mean)
-    parameter_names = ['a', 'mu', 'sigma']
-    fitter.plot_trace(name, date, samples, parameter_names)
+    
+    # velocity and associated uncertainty calculation
+    velocity = fitter.relativistic_doppler(wavelength = posterior_mean[1])
+    print(f"Calculated Velocity: {velocity}")
+    unc = lam_s * (posterior_mean[2]/299792.458)
+    print(f"Calculated uncertainty: {unc}")
+    
+    # chi_square calculation
     _, model_flux = fitter.model(wv, flux, wvc, posterior_mean)
     chi_square = fitter.chi_square(fc, model_flux)
     print(f"Chi-square value: {chi_square}")
+    
+    # lmfit model
+    fit_params, covariance = fitter.fit_gaussian(wvc, fc)
+    vel_sci = fitter.relativistic_doppler(wavelength = fit_params[1])
+    unc_sci = lam_s * (fit_params[2]/299792.458)
+    chi_square_lm = fitter.chi_square(fc, fitter.gaussian(wvc, *fit_params))
+    print(f"Calculated Velocity (lmfit): {vel_sci}")
+    print(f"Calculated Uncertainty (lmfit): {unc_sci}")
+    print(f"Chi-square value (lmfit): {chi_square_lm}")
+    
+    
+    #plots
+    fitter.plot_results(wv, flux, wvc, posterior_mean)
+    parameter_names = ['a', 'mu', 'sigma']
+    fitter.plot_trace(name, date, samples, parameter_names)
+    corner_plot = corner.corner(np.array(samples), labels=['amp', 'mu', 'sigma'])
+    plt.savefig(f'{name}_{date}_corner_plot.png')
+    
+    # Output file
+    output_filename = name + "_" + date + "_" + "results.txt"
+    with open(output_filename, "w") as f:
+        f.write("Parameter Values:\n")
+        for parameter_name, param_value in zip(["Amplitude", "Mu", "Sigma"], posterior_mean):
+            f.write(f"{parameter_name}: {param_value}\n")
+        f.write(f"Velocity: {velocity} km/s\n")
+        f.write(f"Uncertainty: {unc}\n")
+        f.write(f"Chi-Square: {chi_square}\n")
