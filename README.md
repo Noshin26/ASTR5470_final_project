@@ -5,12 +5,12 @@ This Python script enables users to analyze spectra of SNe Ic-bl by fitting Gaus
 1. Clone the repository or download the `gaussian_fit_mcmc.py` file.
 2. Navigate to the directory containing `gaussian_fit_mcmc.py`.
 3. To run the script, use the following command in your terminal:
-python gaussian_fit_mcmc.py spectrum_file.ascii -z <galaxy_redshift> -l <absorption_line>
+'python gaussian_fit_mcmc.py spectrum_file.ascii -z <galaxy_redshift> -l <absorption_line>'
 Replace spectrum_file.ascii with the path to your spectrum data file. Additionally, include the following optional arguments:
 -z: Specifies the galaxy redshift.
 -l: Specifies the absorption line.
 # Unittest
-A testing script gaussian_fit_mcmc_tests.py is provided to test key functions of the main script. You can run the tests using the following command: python gaussian_fit_mcmc_tests.py
+A testing script gaussian_fit_mcmc_tests.py is provided to test key functions of the main script. You can run the tests using the following command: 'python gaussian_fit_mcmc_tests.py'
 Ensure that you have installed the unittest module to execute the tests.
 # Instructions
 Upon running the command, an interactive window will open, displaying the supernova spectrum.
