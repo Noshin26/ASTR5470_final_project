@@ -51,7 +51,7 @@ class GaussianFitter:
             spec = readsav(self.spectrum_file)
             
             # Normalize the flux by dividing by the mean flux
-            flux = spec['f_ft'] / np.mean(spec['f_ft'])
+            flux = spec['f_ft'] / np.mean(spec['f_ft'])        
             
             # Apply redshift correction to wavelengths
             wv = spec['w'] / (1 + self.z)
@@ -189,7 +189,7 @@ class GaussianFitter:
         # Apply the wavelength range parameter
         a, mu, sigma = parameters
         msk = np.logical_and(wv >= np.min(wvc), wv <= np.max(wvc))
-        absorption_model = -1 * a * np.exp(-0.5 * ((wv[msk] - mu) / sigma) ** 2) + (np.min(flux[msk]))
+        absorption_model = -1 * a * np.exp(-0.5 * ((wv[msk] - mu) / sigma) ** 2) + (np.min(flux[msk]) + a)
 
         return msk, absorption_model
     
@@ -246,12 +246,12 @@ class GaussianFitter:
         """
         c=299792.458
         amp_low = 0.05
-        amp_high = 1
-        mu_low = self.relativistic_doppler(velocity = -60000)
-        mu_high = self.relativistic_doppler(velocity = -5000)
-        sigma_low = 0
+        amp_high = 0.6
+        mu_low = self.relativistic_doppler(velocity = -40000)
+        mu_high = self.relativistic_doppler(velocity = -8000)
         _, _, lam_s = self.select_line()
-        sigma_high = lam_s * (10000/c)
+        sigma_low = lam_s * (5000/c)
+        sigma_high = lam_s * (20000/c)
         mu_prior = self.uniform_prior(mu_low, mu_high)
         sigma_prior = self.uniform_prior(sigma_low, sigma_high)
         amp_prior = self.uniform_prior(amp_low, amp_high)
@@ -335,7 +335,7 @@ class GaussianFitter:
         """
         current_param = initial_param
         samples = []
-        step_sizes = [0.1, 10, 10]
+        step_sizes = [0.1, 100, 10]
         prior = self.combined_prior()
         for _ in range(num_iterations):
             proposed_params = self.proposal(wv, flux, wvc, current_param, 10000, step_sizes)
@@ -365,13 +365,13 @@ class GaussianFitter:
         - list: Initial parameter values [amplitude, mu, sigma].
         """
         c=299792.458
-        a = 0.5
-        mu_low = self.relativistic_doppler(velocity = -60000)
-        mu_high = self.relativistic_doppler(velocity = -5000)
+        a = 0.1
+        mu_low = self.relativistic_doppler(velocity = -40000)
+        mu_high = self.relativistic_doppler(velocity = -8000)
         mu = ((mu_high-mu_low)/2) + mu_low
-        sigma_low = 0
         _, _, lam_s = self.select_line()
-        sigma_high = lam_s * (10000/c)
+        sigma_low = lam_s * (5000/c)
+        sigma_high = lam_s * (20000/c)
         sigma = (sigma_high-sigma_low)/2
         delta_w = np.max(wvc) - np.min(wvc)
         init_param = [a, mu, sigma]
@@ -419,13 +419,13 @@ class GaussianFitter:
         
         # Set initial parameter values
         c=299792.458
-        a = 0.5
-        mu_low = self.relativistic_doppler(velocity = -60000)
-        mu_high = self.relativistic_doppler(velocity = -5000)
+        a = 0.1
+        mu_low = self.relativistic_doppler(velocity = -40000)
+        mu_high = self.relativistic_doppler(velocity = -8000)
         mu = ((mu_high-mu_low)/2) + mu_low
-        sigma_low = 0
         _, _, lam_s = self.select_line()
-        sigma_high = lam_s * (10000/c)
+        sigma_low = lam_s * (5000/c)
+        sigma_high = lam_s * (20000/c)
         sigma = (sigma_high-sigma_low)/2
         params = model.make_params(amp=-a, mu=mu, sigma=sigma, baseline=np.mean(fc))
         
@@ -533,14 +533,14 @@ if __name__ == "__main__":
     fc = np.array(fc).flatten()
     _, _, lam_s = fitter.select_line()
     initial_param = fitter.set_initial_param(wvc, fc)
-    samples = fitter.posterior_analysis(wv, flux, wvc, initial_param, num_iterations = 100)
+    samples = fitter.posterior_analysis(wv, flux, wvc, initial_param, num_iterations = 150)
     posterior_mean = np.mean(samples, axis=0)
     print("Posterior mean of parameters:", posterior_mean)
     
     # velocity and associated uncertainty calculation
     velocity = fitter.relativistic_doppler(wavelength = posterior_mean[1])
     print(f"Calculated Velocity: {velocity}")
-    unc = lam_s * (posterior_mean[2]/299792.458)
+    unc = lam_s * ((np.std(samples, axis=0))[1]/299792.458)
     print(f"Calculated uncertainty: {unc}")
     
     # chi_square calculation
@@ -551,8 +551,9 @@ if __name__ == "__main__":
     # lmfit model
     fit_params, covariance = fitter.fit_gaussian(wvc, fc)
     vel_sci = fitter.relativistic_doppler(wavelength = fit_params[1])
-    unc_sci = lam_s * (fit_params[2]/299792.458)
+    unc_sci = lam_s * (np.sqrt(covariance[1][1])/299792.458)
     chi_square_lm = fitter.chi_square(fc, fitter.gaussian(wvc, *fit_params))
+    print("Fitted parameters from lmfit:", fit_params)
     print(f"Calculated Velocity (lmfit): {vel_sci}")
     print(f"Calculated Uncertainty (lmfit): {unc_sci}")
     print(f"Chi-square value (lmfit): {chi_square_lm}")

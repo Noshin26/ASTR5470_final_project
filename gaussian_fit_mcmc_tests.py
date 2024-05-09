@@ -19,64 +19,56 @@ class TestGaussianFitter(unittest.TestCase):
         self.gaussian_fitter.flux = np.random.rand(100)
         self.gaussian_fitter.name = "Test SN"
         self.gaussian_fitter.date = "2024-05-01"
-        self.gaussian_fitter.l = 6564  # Example rest wavelength
+        self.gaussian_fitter.l = "FeII5169"  # Example rest wavelength
     
     def test_relativistic_doppler_velocity(self):
         # Test velocity to wavelength conversion
         velocity = -20000  # km/s
         expected_wavelength = self.gaussian_fitter.relativistic_doppler(velocity=velocity)
         self.assertIsInstance(expected_wavelength, float)
-        self.assertAlmostEqual(expected_wavelength, 6139.775134)
+        self.assertAlmostEqual(expected_wavelength,  4834.932612380226)
 
     def test_relativistic_doppler_wavelength(self):
         # Test wavelength to velocity conversion
-        wavelength = 6139.775134  # Angstroms
+        wavelength =  4834.932612380226 # Angstroms
         expected_velocity = self.gaussian_fitter.relativistic_doppler(wavelength=wavelength)
         self.assertIsInstance(expected_velocity, float)
-        self.assertAlmostEqual(expected_velocity, -20000.000000167354)
+        self.assertAlmostEqual(expected_velocity, -19999.999999999978)
         
     def test_uniform_prior(self):
         # Test the uniform_prior function
-        amp_low = 0
-        amp_high = 3
+        amp_low = 0.05
+        amp_high = 0.6
         mu_low = 4500
         mu_high = 5500
-        sigma_low = 0
+        sigma_low = 10
         sigma_high = 100
         amp_pdf = self.gaussian_fitter.uniform_prior(amp_low, amp_high)
         mu_pdf = self.gaussian_fitter.uniform_prior(mu_low, mu_high)
         sigma_pdf = self.gaussian_fitter.uniform_prior(sigma_low, sigma_high)
-        self.assertEqual(amp_pdf(1), 1/3)  # amp
+        self.assertAlmostEqual(amp_pdf(0.5), 1/0.55)  # amp
         self.assertEqual(mu_pdf(5000), 1/1000)   # mu
-        self.assertEqual(sigma_pdf(70), 1/100)  # sigma  
-
-    def test_gaussian_prior(self):
-        # Test the gaussian_prior function
-        mu = 0
-        sigma = 100/3
-        gaussian_pdf = self.gaussian_fitter.gaussian_prior(mu, sigma)
-        self.assertAlmostEqual(gaussian_pdf(0), 0.01196826841)  # Value at mean
-        self.assertAlmostEqual(gaussian_pdf(1), 0.0119628839)  # Value at one standard deviation away from mean
+        self.assertEqual(sigma_pdf(70), 1/90)  # sigma  
 
     def test_combined_prior(self):
         # Test the combined_prior function
         combined_pdf = self.gaussian_fitter.combined_prior()
-        parameters = [1, 5000, 70, 1]
-        self.assertAlmostEqual(combined_pdf(parameters), (1/3)*(1/1000)*(1/100)*0.0119628839)  # Test with example parameters
+        parameters = [0.1, 5000, 100]
+        self.assertAlmostEqual(combined_pdf(parameters), 1.3700593894200265e-05)  # Test with example parameters
 
     def test_likelihood(self):
         # Test likelihood function
-        initial_parameters = [1.0, 5000, 100, 1000]
-        likelihood_value = self.gaussian_fitter.likelihood(self.gaussian_fitter.wv, self.gaussian_fitter.flux, initial_parameters)
+        initial_parameters = [1.0, 5000, 100]
+        likelihood_value = self.gaussian_fitter.likelihood(self.gaussian_fitter.wv, self.gaussian_fitter.flux, self.gaussian_fitter.wv[10:], initial_parameters)
         self.assertIsInstance(likelihood_value, float)
         self.assertGreaterEqual(likelihood_value, 0)
 
     def test_proposal(self):
         # Test proposal function
-        initial_parameters = [1.0, 5000, 100, 1000]
+        initial_parameters = [1.0, 5000, 100]
         iterations = 10000
-        step_sizes = [0.1, 10, 1, 1]
-        samples = self.gaussian_fitter.proposal(self.gaussian_fitter.wv, self.gaussian_fitter.flux, initial_parameters, iterations, step_sizes)
+        step_sizes = [0.1, 10, 1]
+        samples = self.gaussian_fitter.proposal(self.gaussian_fitter.wv, self.gaussian_fitter.flux, self.gaussian_fitter.wv[10:], initial_parameters, iterations, step_sizes)
         
         # Check if samples is a list
         self.assertIsInstance(samples, list)
@@ -99,9 +91,9 @@ class TestGaussianFitter(unittest.TestCase):
 
     def test_posterior_analysis(self):
         # Test posterior_analysis function
-        initial_parameters = [1.0, 5000, 100, 1000]
+        initial_parameters = [1.0, 5000, 100]
         num_iterations = 3
-        accepted_samples = self.gaussian_fitter.posterior_analysis(self.gaussian_fitter.wv, self.gaussian_fitter.flux, initial_parameters, num_iterations)
+        accepted_samples = self.gaussian_fitter.posterior_analysis(self.gaussian_fitter.wv, self.gaussian_fitter.flux, self.gaussian_fitter.wv[10:], initial_parameters, num_iterations)
         
         # Check if the returned value is a list
         self.assertIsInstance(accepted_samples, list)
