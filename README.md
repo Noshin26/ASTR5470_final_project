@@ -5,8 +5,8 @@ This Python script enables users to analyze spectra of SNe Ic-bl by fitting Gaus
 1. Clone the repository or download the `gaussian_fit_mcmc.py` file.
 2. Navigate to the directory containing `gaussian_fit_mcmc.py`.
 3. To run the script, use the following command in your terminal:
-'python gaussian_fit_mcmc.py spectrum_file.ascii -z <galaxy_redshift> -l <absorption_line>'
-Replace spectrum_file.ascii with the path to your spectrum data file. Additionally, include the following optional arguments:
+'python gaussian_fit_mcmc.py spectrum_file.sav -z <galaxy_redshift> -l <absorption_line>'
+Replace spectrum_file.sav with the path to your spectrum data file. Note the spectrum file here contains smoothed spectrum, otherwise there is a high chance thst the code may get stuck at a local minimum. Additionally, include the following optional arguments:
 -z: Specifies the galaxy redshift.
 -l: Specifies the absorption line.
 # Instructions
